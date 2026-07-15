@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 # Genericness proof + boundary guard: a second, unrelated multi-step form ("event feedback")
@@ -27,7 +29,7 @@ RSpec.describe 'EmeraldCascade genericness' do
       step :issues, title: 'Any issues?', fields: [
         EmeraldCascade::Field.new(:had_issues, type: :boolean, required: true),
         EmeraldCascade::Field.new(:issue_details, type: :text,
-                                  depends_on: { field: :had_issues, equals: true })
+                                                  depends_on: { field: :had_issues, equals: true })
       ]
       step :catering, title: 'Catering', visible_when: ->(r) { r.catered? }, fields: [
         EmeraldCascade::Field.new(:meal_quality, type: :enum, choices: %w[poor ok great])
