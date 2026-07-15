@@ -1,0 +1,45 @@
+<%#
+  Client-side show/hide for conditional companion fields. Reads the data-emerald-show-*
+  attributes emitted by the field partial and toggles the .emerald-show class (disabling
+  hidden inputs so they neither submit nor block required-field validation while
+  collapsed). `scope` is the form's param key, passed in so the engine isn't tied to
+  any host model name.
+-%>
+<script>
+  (function () {
+    var scope = <%= raw scope.to_json %>;
+    var items = [];
+    document.querySelectorAll('[data-emerald-show-field]').forEach(function (el) {
+      var name = el.getAttribute('data-emerald-show-field');
+      var want = el.getAttribute('data-emerald-show-value');
+      var includes = el.getAttribute('data-emerald-show-includes') === '1';
+      var base = '[name="' + scope + '[' + name + (includes ? '][]' : ']') + '"]';
+      function shown() {
+        if (includes) {
+          // Controlled by a checklist: show when the matching option is checked (and
+          // still active; a disabled option belongs to a collapsed parent field).
+          return !!document.querySelector(base + '[value="' + want + '"]:checked:not(:disabled)');
+        }
+        var checked = document.querySelector(base + ':checked');
+        return checked ? String(checked.value) === String(want) : false;
+      }
+      items.push({ el: el, shown: shown });
+    });
+
+    // The CSS owns the height/animation entirely; here we only reflect the desired
+    // visibility as a class (and disable hidden inputs so they don't submit or get
+    // flagged by the browser's required-field validation while collapsed).
+    function apply(it) {
+      var el = it.el, show = it.shown();
+      el.classList.toggle('emerald-show', show);
+      el.querySelectorAll('input, select, textarea').forEach(function (f) { f.disabled = !show; });
+    }
+
+    // Re-run every toggle on any change so chained companions (a checklist that itself
+    // reveals a detail field) resolve regardless of nesting depth.
+    function syncAll() { items.forEach(apply); }
+    var form = document.getElementById('emerald-step-form');
+    if (form) form.addEventListener('change', syncAll);
+    syncAll();
+  })();
+</script>

@@ -1,0 +1,37 @@
+<%# Grays out + disables the nav buttons the moment they are pressed (slow-network double-submit %>
+<%# guard). Listeners bind to the page's own nav elements, so they never leak across renders and %>
+<%# the buttons come back active on the next page. %>
+<script>
+  (function () {
+    // Clear the pressed-state before Turbo snapshots the page for its cache, so a cached
+    // back/forward preview never restores stale, grayed-out buttons. Registered once.
+    if (!window.__emeraldNavBusyReset) {
+      window.__emeraldNavBusyReset = true;
+      document.addEventListener('turbo:before-cache', function () {
+        document.querySelectorAll('.emerald-btn-busy').forEach(function (el) {
+          el.classList.remove('emerald-btn-busy');
+          if ('disabled' in el) el.disabled = false;
+          el.removeAttribute('aria-disabled');
+        });
+      });
+    }
+
+    var actions = document.querySelector('.emerald-actions');
+    if (!actions) return;
+
+    function markBusy() {
+      actions.querySelectorAll('.emerald-btn').forEach(function (el) {
+        el.classList.add('emerald-btn-busy');
+        if ('disabled' in el) el.disabled = true;
+        el.setAttribute('aria-disabled', 'true');
+      });
+    }
+
+    var form = actions.closest('form');
+    if (form) form.addEventListener('turbo:submit-start', markBusy);
+
+    actions.querySelectorAll('a.emerald-btn').forEach(function (link) {
+      link.addEventListener('click', markBusy);
+    });
+  })();
+</script>

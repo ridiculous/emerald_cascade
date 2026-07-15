@@ -1,0 +1,40 @@
+<%#
+  Background turbo-frame poller. While `poll_marker` is present inside the `frame_id`
+  frame, reload the frame every `interval` ms so async processing results (e.g. OCR)
+  appear without a manual refresh. It pauses during an upload/remove submit so a poll can
+  never cancel that request, and tears down on any Turbo navigation so the timer never
+  outlives the page or fires mid-visit.
+-%>
+<script>
+  (function () {
+    var frame = document.getElementById(<%= raw frame_id.to_json %>);
+    if (!frame || typeof frame.reload !== 'function') return;
+    var marker = <%= raw poll_marker.to_json %>, interval = <%= interval %>;
+    var url = window.location.href, timer = null, polls = 0;
+
+    function pending() { return !!frame.querySelector(marker); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function tick() {
+      if (!pending() || polls++ > 60) return stop(); // stop when settled or after ~4 min
+      // First poll seeds src (which fetches); later polls re-fetch the same frame in place.
+      if (frame.hasAttribute('src')) frame.reload(); else frame.setAttribute('src', url);
+    }
+    function ensure() {
+      if (pending() && !timer) { polls = 0; timer = setInterval(tick, interval); }
+      else if (!pending()) stop();
+    }
+
+    frame.addEventListener('turbo:submit-start', stop);
+    frame.addEventListener('turbo:frame-load', ensure);
+
+    function teardown() {
+      stop();
+      document.removeEventListener('turbo:before-visit', teardown);
+      document.removeEventListener('turbo:before-cache', teardown);
+    }
+    document.addEventListener('turbo:before-visit', teardown);
+    document.addEventListener('turbo:before-cache', teardown);
+
+    ensure();
+  })();
+</script>

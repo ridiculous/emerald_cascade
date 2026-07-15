@@ -1,0 +1,15 @@
+/.bundle/
+/vendor/bundle/
+/pkg/
+/tmp/
+/coverage/
+*.gem
+.DS_Store
+
+# A library commits its gemspec, not a lockfile, so it resolves against each host's versions.
+/Gemfile.lock
+
+# Dummy app runtime artifacts (the app itself is checked in for the test harness).
+/spec/dummy/log/*
+/spec/dummy/tmp/*
+!/spec/dummy/log/.keep

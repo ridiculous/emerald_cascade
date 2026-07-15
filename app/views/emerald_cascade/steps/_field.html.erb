@@ -1,0 +1,88 @@
+<%#
+  Renders one field based on its declared type. Companion fields (depends_on) get
+  data attributes for the client-side show/hide and are hidden server-side when their
+  controlling answer isn't set yet. The param scope is taken from the form builder
+  (f.object_name) so this partial isn't tied to any host model name.
+-%>
+<% depends = field.depends_on
+   hidden = depends && !field.visible?(submission)
+   value = field.value(submission) %>
+
+<div class="emerald-field<%= ' emerald-show' if depends && !hidden %>"
+     <% if depends %>
+       data-emerald-show-field="<%= depends[:field] %>"
+       data-emerald-show-value="<%= field.depends_on_value %>"
+       <%= 'data-emerald-show-includes="1"'.html_safe if field.depends_on_includes? %>
+     <% end %>>
+
+  <label class="emerald-label">
+    <%= field.label %><% if field.required?(submission) %> <span class="emerald-req">*</span><% end %>
+  </label>
+  <% if field.help.present? %><p class="emerald-help"><%= field.help %></p><% end %>
+
+  <% case field.type %>
+  <% when :boolean %>
+    <ul class="emerald-choices">
+      <% [['Yes', 'true'], ['No', 'false']].each do |label, val| %>
+        <li class="emerald-choice">
+          <%= f.radio_button field.key, val, checked: (!value.nil? && value.to_s == val), id: "#{field.key}_#{val}" %>
+          <%= label_tag "#{field.key}_#{val}", label %>
+        </li>
+      <% end %>
+    </ul>
+
+  <% when :enum %>
+    <ul class="emerald-choices">
+      <% field.choices.each_with_index do |choice, i| %>
+        <li class="emerald-choice">
+          <%= f.radio_button field.key, choice, checked: (value == choice), id: "#{field.key}_#{i}" %>
+          <%= label_tag "#{field.key}_#{i}", choice %>
+        </li>
+      <% end %>
+    </ul>
+
+  <% when :array %>
+    <ul class="emerald-choices">
+      <%= f.hidden_field field.key, multiple: true, value: '' %>
+      <% Array(field.choices).each_with_index do |choice, i| %>
+        <li class="emerald-choice">
+          <%= check_box_tag "#{f.object_name}[#{field.key}][]", choice,
+                Array(value).include?(choice), id: "#{field.key}_#{i}" %>
+          <%= label_tag "#{field.key}_#{i}", choice %>
+        </li>
+      <% end %>
+    </ul>
+
+  <% when :rating %>
+    <% stars = Array(field.choices)
+       max = stars.max %>
+    <ul class="emerald-choices">
+      <% stars.each_with_index do |n, i| %>
+        <li class="emerald-choice">
+          <%= f.radio_button field.key, n, checked: (value == n), id: "#{field.key}_#{i}" %>
+          <%= label_tag "#{field.key}_#{i}", ('&#9733;' * n + '&#9734;' * (max - n)).html_safe %>
+        </li>
+      <% end %>
+      <% unless field.required?(submission) %>
+        <li class="emerald-choice">
+          <%= f.radio_button field.key, '', checked: value.nil?, id: "#{field.key}_none" %>
+          <%= label_tag "#{field.key}_none", "I don't know" %>
+        </li>
+      <% end %>
+    </ul>
+
+  <% when :integer %>
+    <%= f.number_field field.key, value: value, min: 0, step: 1, inputmode: 'numeric',
+          placeholder: 'Type your answer here...' %>
+
+  <% when :decimal %>
+    <%= f.number_field field.key, value: value, min: 0, step: field.step || 'any', inputmode: 'decimal',
+          placeholder: 'Type your answer here...' %>
+
+  <% when :text %>
+    <%= f.text_area field.key, value: value, placeholder: 'Type your answer here...' %>
+
+  <% else %>
+    <%= f.text_field field.key, value: value, placeholder: 'Type your answer here...' %>
+  <% end %>
+</div>

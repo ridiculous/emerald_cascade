@@ -1,0 +1,39 @@
+# Self-contained config for the standalone engine (does not inherit the host app's config,
+# so it travels unchanged when the engine moves to its own repo).
+plugins:
+  - rubocop-rails
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: disable
+  SuggestExtensions: false
+  Exclude:
+    - 'spec/dummy/**/*'
+    - 'vendor/**/*'
+
+# Small, declarative behavior gem: the definition/field POROs take rich keyword lists and the
+# submission concern reads as one cohesive state-machine DSL, so the size/complexity metrics
+# fight the intended style rather than improving it.
+Metrics:
+  Enabled: false
+
+# The attachment lifecycle writes single status/result columns directly, by design.
+Rails/SkipsModelValidations:
+  Enabled: false
+
+# state_machines yields (object, transition) to transition callbacks, so the explicit block
+# argument is required; a symbol proc would forward the transition and break the arity.
+Style/SymbolProc:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Layout/TrailingWhitespace:
+  Enabled: false
+
+# The standalone specs define throwaway models directly on ActiveRecord::Base (the dummy app
+# has no ApplicationRecord).
+Rails/ApplicationRecord:
+  Exclude:
+    - 'spec/**/*'
