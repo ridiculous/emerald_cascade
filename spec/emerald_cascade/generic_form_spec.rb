@@ -88,31 +88,38 @@ RSpec.describe 'EmeraldCascade genericness' do
     end
   end
 
-  describe 'field validation + conditional visibility' do
-    def validate_step(record, key)
-      EventFeedbackDefinition.step_for(key).fields.each { |f| f.validate(record) }
-      record
-    end
-
-    it 'flags required fields left blank' do
-      record = validate_step(EventFeedback.new, 'attendee')
+  describe 'definition-driven validation (valid_page? / valid_for_submit?)' do
+    it 'flags required fields left blank on a page' do
+      record = EventFeedback.new
+      expect(record.valid_page?('attendee')).to be(false)
 
       expect(record.errors[:attendee_name]).to be_present
       expect(record.errors[:overall_rating]).to be_present
     end
 
     it 'rejects an out-of-set enum value' do
-      record = validate_step(EventFeedback.new(meal_quality: 'terrible'), 'catering')
+      record = EventFeedback.new(catered: true, meal_quality: 'terrible')
+      expect(record.valid_page?('catering')).to be(false)
 
       expect(record.errors[:meal_quality]).to be_present
     end
 
     it 'requires a companion field only when its controlling answer is set' do
-      hidden = validate_step(EventFeedback.new(had_issues: false), 'issues')
+      hidden = EventFeedback.new(had_issues: false)
+      expect(hidden.valid_page?('issues')).to be(true)
       expect(hidden.errors[:issue_details]).to be_empty
 
-      shown = validate_step(EventFeedback.new(had_issues: true), 'issues')
+      shown = EventFeedback.new(had_issues: true)
+      expect(shown.valid_page?('issues')).to be(false)
       expect(shown.errors[:issue_details]).to be_present
+    end
+
+    it 'validates the whole form on submit, skipping the review page' do
+      record = EventFeedback.new(catered: false)
+      expect(record.valid_for_submit?).to be(false) # attendee + issues pages unanswered
+
+      record.assign_attributes(attendee_name: 'Ada', overall_rating: 5, had_issues: false)
+      expect(record.valid_for_submit?).to be(true)
     end
   end
 

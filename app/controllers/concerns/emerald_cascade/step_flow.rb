@@ -82,9 +82,9 @@ module EmeraldCascade
     # Per-page setup on GET (e.g. seed nested rows before the page renders).
     def on_step_show(_step); end
 
-    # The page key whose submit finalizes the form.
+    # The page key whose submit finalizes the form (owned by the submission model).
     def review_step_key
-      'review'
+      @submission.review_step_key
     end
 
     # Flash notice shown after a successful submit (nil for none).

@@ -165,6 +165,44 @@ module EmeraldCascade
       advance! until page_visible?(state)
     end
 
+    # --- definition-driven validation over the visible subset -------------------
+    #
+    # `valid_page?` checks one page so partial progress is fine; `valid_for_submit?`
+    # checks the whole form (minus the review page) before completing. Both clear
+    # errors first and validate through the field declarations. A host whose page
+    # validates more than its fields (nested records, uploads) overrides
+    # `validate_step` and delegates the rest with `super`.
+
+    def valid_page?(step_key)
+      errors.clear
+      step = visible_steps.find { |s| s.key == step_key.to_s }
+      return true unless step
+
+      validate_step(step)
+      errors.empty?
+    end
+
+    def valid_for_submit?
+      errors.clear
+      visible_steps.each do |step|
+        next if step.key == review_step_key
+
+        validate_step(step)
+      end
+      errors.empty?
+    end
+
+    # Default per-page validation: run each field's own validation. Override on the
+    # host for pages that validate more than their declared fields.
+    def validate_step(step)
+      step.fields.each { |field| field.validate(self) }
+    end
+
+    # The final page: it only reviews and submits, so whole-form validation skips it.
+    def review_step_key
+      'review'
+    end
+
     # --- lifecycle completion hooks (host overrides) ----------------------------
     # Host-specific work on completion (snapshots, child recompute, etc.) lives on
     # the host model by overriding these no-ops.

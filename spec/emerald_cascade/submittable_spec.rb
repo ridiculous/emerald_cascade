@@ -60,9 +60,9 @@ RSpec.describe EmeraldCascade::Submittable do
     expect(feedback.reload).to have_attributes(state: 'complete', finalized: true, completed_at: be_present)
   end
 
-  it 'validates required fields through the definition' do
+  it 'validates a page through the definition' do
     record = Feedback.new
-    FeedbackDefinition.step_for('about').fields.each { |f| f.validate(record) }
+    expect(record.valid_page?('about')).to be(false)
 
     expect(record.errors[:attendee_name]).to be_present
   end
