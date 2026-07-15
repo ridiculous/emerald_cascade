@@ -13,3 +13,4 @@
 /spec/dummy/log/*
 /spec/dummy/tmp/*
 !/spec/dummy/log/.keep
+.idea
