@@ -7,10 +7,8 @@
 -%>
 <script>
   (function () {
-    var frame = document.getElementById(<%= raw frame_id.to_json %>);
-    if (!frame || typeof frame.reload !== 'function') return;
     var marker = <%= raw poll_marker.to_json %>, interval = <%= interval %>;
-    var url = window.location.href, timer = null, polls = 0;
+    var url = window.location.href, timer = null, polls = 0, frame = null;
 
     function pending() { return !!frame.querySelector(marker); }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
@@ -24,17 +22,33 @@
       else if (!pending()) stop();
     }
 
-    frame.addEventListener('turbo:submit-start', stop);
-    frame.addEventListener('turbo:frame-load', ensure);
+    function setup() {
+      frame = document.getElementById(<%= raw frame_id.to_json %>);
+      if (!frame || typeof frame.reload !== 'function') return;
 
-    function teardown() {
-      stop();
-      document.removeEventListener('turbo:before-visit', teardown);
-      document.removeEventListener('turbo:before-cache', teardown);
+      frame.addEventListener('turbo:submit-start', stop);
+      frame.addEventListener('turbo:frame-load', ensure);
+
+      function teardown() {
+        stop();
+        document.removeEventListener('turbo:before-visit', teardown);
+        document.removeEventListener('turbo:before-cache', teardown);
+      }
+      document.addEventListener('turbo:before-visit', teardown);
+      document.addEventListener('turbo:before-cache', teardown);
+
+      ensure();
     }
-    document.addEventListener('turbo:before-visit', teardown);
-    document.addEventListener('turbo:before-cache', teardown);
 
-    ensure();
+    // Turbo ships as a deferred ES module, so this inline (classic) script runs before the
+    // turbo-frame element is upgraded and gains reload() -- without waiting, the poller would
+    // bail on the guard above and OCR status would never refresh on its own. whenDefined
+    // resolves immediately once Turbo is present (e.g. on later Turbo Drive re-renders), so it's
+    // safe both on a fresh load and after a Drive body swap.
+    if (window.customElements && customElements.whenDefined) {
+      customElements.whenDefined('turbo-frame').then(setup);
+    } else {
+      setup();
+    }
   })();
 </script>
