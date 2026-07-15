@@ -116,9 +116,46 @@ ClosingFormItem.nested_attributes_params(extra: [:runout], allow_destroy: true)
 
 ### Controller concerns
 
+The multi-step *flow* is driven by the engine; the host controllers supply only their record
+lookup, route helpers and a few page-specific hooks.
+
+- `EmeraldCascade::Flow` - shared base: the `@submission` guards (`require_submission`,
+  `require_editable!`, `lazy_lock`) and the `current_step` lookup. The host sets `@submission` in
+  a before_action and defines its routes (`submission_url`, `step_url_for(step)`). Include it in
+  the host's base controller.
+- `EmeraldCascade::StepFlow` - one page at a time: `show`/`update`, per-page save + validate
+  (`valid_page?`), advance, and the review-page submit (`valid_for_submit?`). Host hooks:
+  `on_step_show(step)`, `assign_step_attributes(step)` (call `super` to add nested params),
+  `review_step_key` (default `'review'`), `submit_notice`.
+- `EmeraldCascade::SubmissionFlow` - welcome-screen lifecycle: `show`, `create` (Start), `reopen`
+  (Edit) and `reset` (discard). Host hook: `build_submission` (build the new record with its
+  source/type/defaults).
 - `EmeraldCascade::AttachmentUploads` - generic `create`/`destroy` for a submission's attachment
   collection (optional max count, append, after-create hook, redirect back). The host supplies
   `attachments`, `attachment_limit`, `attachments_redirect_url`, `after_attachment_created`.
+
+```ruby
+class ClosingForm::BaseController < ApplicationController
+  include EmeraldCascade::Flow
+  before_action :load_submission   # sets @submission (host-owned lookup)
+  def submission_url = closing_form_submission_path(...)
+  def step_url_for(step) = closing_form_step_path(step:, ...)
+end
+
+class ClosingForm::StepsController < ClosingForm::BaseController
+  include EmeraldCascade::StepFlow
+
+  def on_step_show(step) = @submission.build_product_items_from_order! if step.key == 'products'
+  def assign_step_attributes(step)
+    super
+    @submission.assign_attributes(product_params) if step.key == 'products'
+  end
+end
+```
+
+Host contract: the submission model includes `Submittable` and also answers `editable?`,
+`valid_page?(key)` and `valid_for_submit?`. Validation stays host-owned because a page may
+validate nested records, not just its own fields.
 
 Admin CRUD (index/edit/update) is intentionally *not* in the engine: it's ordinary Rails admin
 plumbing bound to the host's stack (its admin base controller, authorization, search, pagination
@@ -141,28 +178,19 @@ same-path file (Rails view-path precedence).
 
 ## Testing
 
-Engine behavior is exercised from the host suite:
-
-- `spec/emerald_cascade/generic_form_spec.rb` - **genericness proof / boundary guard**: a second,
-  unrelated form built entirely through the public API against a throwaway table. If any engine
-  code became coupled to the closing form, this fails.
-- The closing-form specs (`spec/models/closing_form*`, `spec/features/closing_form/*`,
-  `spec/requests/admin/closing_form_submissions_js_spec.rb`) are the end-to-end regression net.
-
-## Local development (standalone)
-
-The engine is self-contained and can be developed on its own, without the host app. It ships a
-minimal dummy Rails app (`spec/dummy`, in-memory SQLite) so the suite boots the engine exactly
-as a real host would:
+The engine is self-contained and tests itself against a minimal dummy Rails app (`spec/dummy`,
+in-memory SQLite) that boots the engine exactly as a real host would:
 
 ```
-cd engines/emerald_cascade
 bundle install
 bundle exec rake        # runs rspec + rubocop
 ```
 
-`spec/emerald_cascade/submittable_spec.rb` is the standalone smoke test. Everything needed to
-extract the engine into its own repository is already here: `gemspec`, `Gemfile`, `Rakefile`,
-`LICENSE`, `.rubocop.yml`, and a CI workflow (`.github/workflows/ci.yml`). The only remaining
-step at move time is to point the host's `Gemfile` at the new source (a git or version
-requirement) instead of `path: 'engines/emerald_cascade'`.
+- `spec/emerald_cascade/generic_form_spec.rb` - **genericness proof / boundary guard**: a second,
+  unrelated form built entirely through the public API against a throwaway table. If any engine
+  code became coupled to a specific host form, this fails.
+- `spec/emerald_cascade/submittable_spec.rb` - standalone smoke test of the state machine +
+  navigation.
+
+The engine's controllers and views are additionally exercised end-to-end by the host app's
+closing-form suite (`spec/features/closing_form/*`, `spec/requests/closing_form/*`).
