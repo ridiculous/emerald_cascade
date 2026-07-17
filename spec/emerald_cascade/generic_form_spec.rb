@@ -60,7 +60,7 @@ RSpec.describe 'EmeraldCascade genericness' do
       expect(EventFeedback.new.all_step_keys).to eq(%w[attendee issues catering review])
     end
 
-    it 'begins at the first visible page and stamps nothing until submit' do
+    it 'begins at the first visible step and stamps nothing until submit' do
       feedback = EventFeedback.create!
       feedback.begin_flow!
 
@@ -68,30 +68,30 @@ RSpec.describe 'EmeraldCascade genericness' do
       expect(feedback.completed_at).to be_nil
     end
 
-    it 'omits pages whose visible_when is false, and navigation skips them' do
+    it 'omits steps whose visible_when is false, and navigation skips them' do
       catered = EventFeedback.create!(catered: true)
       plain   = EventFeedback.create!(catered: false)
 
-      expect(catered.visible_page_keys).to eq(%w[attendee issues catering review])
-      expect(plain.visible_page_keys).to eq(%w[attendee issues review])
-      expect(plain.next_page_of('issues')).to eq('review')
-      expect(catered.next_page_of('issues')).to eq('catering')
+      expect(catered.visible_step_keys).to eq(%w[attendee issues catering review])
+      expect(plain.visible_step_keys).to eq(%w[attendee issues review])
+      expect(plain.next_step_of('issues')).to eq('review')
+      expect(catered.next_step_of('issues')).to eq('catering')
     end
 
     it 'runs the host completion hooks on submit' do
       feedback = EventFeedback.create!(catered: false)
       feedback.begin_flow!
-      feedback.goto_page!('review')
+      feedback.goto_step!('review')
       feedback.submit!
 
       expect(feedback.reload).to have_attributes(state: 'complete', finalized: true, completed_at: be_present)
     end
   end
 
-  describe 'definition-driven validation (valid_page? / valid_for_submit?)' do
-    it 'flags required fields left blank on a page' do
+  describe 'definition-driven validation (valid_step? / valid_for_submit?)' do
+    it 'flags required fields left blank on a step' do
       record = EventFeedback.new
-      expect(record.valid_page?('attendee')).to be(false)
+      expect(record.valid_step?('attendee')).to be(false)
 
       expect(record.errors[:attendee_name]).to be_present
       expect(record.errors[:overall_rating]).to be_present
@@ -99,24 +99,24 @@ RSpec.describe 'EmeraldCascade genericness' do
 
     it 'rejects an out-of-set enum value' do
       record = EventFeedback.new(catered: true, meal_quality: 'terrible')
-      expect(record.valid_page?('catering')).to be(false)
+      expect(record.valid_step?('catering')).to be(false)
 
       expect(record.errors[:meal_quality]).to be_present
     end
 
     it 'requires a companion field only when its controlling answer is set' do
       hidden = EventFeedback.new(had_issues: false)
-      expect(hidden.valid_page?('issues')).to be(true)
+      expect(hidden.valid_step?('issues')).to be(true)
       expect(hidden.errors[:issue_details]).to be_empty
 
       shown = EventFeedback.new(had_issues: true)
-      expect(shown.valid_page?('issues')).to be(false)
+      expect(shown.valid_step?('issues')).to be(false)
       expect(shown.errors[:issue_details]).to be_present
     end
 
-    it 'validates the whole form on submit, skipping the review page' do
+    it 'validates the whole form on submit, skipping the review step' do
       record = EventFeedback.new(catered: false)
-      expect(record.valid_for_submit?).to be(false) # attendee + issues pages unanswered
+      expect(record.valid_for_submit?).to be(false) # attendee + issues steps unanswered
 
       record.assign_attributes(attendee_name: 'Ada', overall_rating: 5, had_issues: false)
       expect(record.valid_for_submit?).to be(true)
@@ -133,6 +133,24 @@ RSpec.describe 'EmeraldCascade genericness' do
       expect(klass.nested_attributes_params).to eq(%i[id quantity notes])
       expect(klass.nested_attributes_params(extra: [:flag], allow_destroy: true))
         .to eq(%i[id _destroy quantity notes flag])
+    end
+  end
+
+  describe 'EmeraldCascade::Step declaration flags' do
+    it 'defaults to the generic fields partial and the shared PATCH form' do
+      step = EmeraldCascade::Step.new(:attendee)
+
+      expect(step.partial).to eq('fields')
+      expect(step.custom?).to be(false)
+      expect(step.renders_own_form?).to be(false)
+    end
+
+    it 'exposes a bespoke partial and an own-form step for the host show template' do
+      step = EmeraldCascade::Step.new(:photos, partial: 'photos', own_form: true)
+
+      expect(step.partial).to eq('photos')
+      expect(step.custom?).to be(true)
+      expect(step.renders_own_form?).to be(true)
     end
   end
 end

@@ -19,7 +19,7 @@ module EmeraldCascade
       @submission = build_submission
       @submission.save!(validate: false)
       @submission.begin_flow!
-      redirect_to step_url_for(@submission.state), status: :see_other
+      redirect_to step_url(@submission.state), status: :see_other
     end
 
     def reopen
@@ -27,7 +27,7 @@ module EmeraldCascade
       return if performed?
 
       @submission.reopen_flow! if @submission.complete?
-      redirect_to step_url_for(@submission.state), status: :see_other
+      redirect_to step_url(@submission.state), status: :see_other
     end
 
     # Discard the whole submission (answers, items, attachments) and return to the welcome page,

@@ -16,35 +16,35 @@ module EmeraldCascade
     class_methods do
       # Declares the form and builds the state machine. States are the definition's
       # full step-key superset plus not_started/complete/locked; advance/back walk the
-      # superset in order, while the navigation helpers below skip hidden pages.
+      # superset in order, while the navigation helpers below skip hidden steps.
       def emerald_cascade_form(definition)
         self.emerald_cascade_definition = definition
-        pages = definition.all_step_keys
-        raise ArgumentError, 'EmeraldCascade form definition has no steps' if pages.empty?
+        steps = definition.all_step_keys
+        raise ArgumentError, 'EmeraldCascade form definition has no steps' if steps.empty?
 
-        states = ['not_started', *pages, 'complete', 'locked'].map(&:to_sym)
+        states = ['not_started', *steps, 'complete', 'locked'].map(&:to_sym)
 
         state_machine :state, initial: :not_started do
           state(*states)
 
           event :start do
-            transition not_started: pages.first.to_sym
+            transition not_started: steps.first.to_sym
           end
 
           event :advance do
-            pages.each_cons(2) { |from, to| transition from.to_sym => to.to_sym }
+            steps.each_cons(2) { |from, to| transition from.to_sym => to.to_sym }
           end
 
           event :back do
-            pages.each_cons(2) { |from, to| transition to.to_sym => from.to_sym }
+            steps.each_cons(2) { |from, to| transition to.to_sym => from.to_sym }
           end
 
           event :submit do
-            transition pages.last.to_sym => :complete
+            transition steps.last.to_sym => :complete
           end
 
           event :reopen do
-            transition complete: pages.first.to_sym
+            transition complete: steps.first.to_sym
           end
 
           event :lock do
@@ -72,10 +72,10 @@ module EmeraldCascade
 
     # --- navigation over the visible subset -------------------------------------
     #
-    # `state` names a page in the full superset; these helpers translate to the
+    # `state` names a step in the full superset; these helpers translate to the
     # per-record *visible* subset so links and advance/back reflect what's shown.
 
-    def visible_page_keys
+    def visible_step_keys
       emerald_cascade_definition.for(self).map(&:key)
     end
 
@@ -87,63 +87,68 @@ module EmeraldCascade
       emerald_cascade_definition.step_for(state)
     end
 
-    def page_visible?(key)
-      visible_page_keys.include?(key.to_s)
+    # Human-friendly label for the persisted state (e.g. an admin status column).
+    def display_state
+      state.to_s.humanize
     end
 
-    def first_page
-      visible_page_keys.first
+    def step_visible?(key)
+      visible_step_keys.include?(key.to_s)
     end
 
-    def next_page
-      next_page_of(state)
+    def first_step
+      visible_step_keys.first
     end
 
-    def prev_page
-      prev_page_of(state)
+    def next_step
+      next_step_of(state)
     end
 
-    # Neighboring visible pages relative to an arbitrary page (not the persisted
-    # state), so navigation links reflect the page actually being viewed.
-    def next_page_of(key)
-      keys = visible_page_keys
+    def prev_step
+      prev_step_of(state)
+    end
+
+    # Neighboring visible steps relative to an arbitrary step (not the persisted
+    # state), so navigation links reflect the step actually being viewed.
+    def next_step_of(key)
+      keys = visible_step_keys
       i = keys.index(key.to_s)
       i && keys[i + 1]
     end
 
-    def prev_page_of(key)
-      keys = visible_page_keys
+    def prev_step_of(key)
+      keys = visible_step_keys
       i = keys.index(key.to_s)
       i&.positive? ? keys[i - 1] : nil
     end
 
-    def advance_page!
-      target = next_page
+    def advance_step!
+      target = next_step
       return unless target
 
       advance! until state == target
     end
 
-    def back_page!
-      target = prev_page
+    def back_step!
+      target = prev_step
       return unless target
 
       back! until state == target
     end
 
-    # Advance to the page after `step_key` (relative to the viewed page, not the
+    # Advance to the step after `step_key` (relative to the viewed step, not the
     # persisted state) so Continue works even when the user navigated back.
     def advance_from!(step_key)
-      goto_page!(next_page_of(step_key))
+      goto_step!(next_step_of(step_key))
     end
 
-    # Walk the sequential state machine to any visible target page, in either
-    # direction, looping over omitted superset pages.
-    def goto_page!(target)
+    # Walk the sequential state machine to any visible target step, in either
+    # direction, looping over omitted superset steps.
+    def goto_step!(target)
       return unless target
 
       target = target.to_s
-      return unless page_visible?(target)
+      return unless step_visible?(target)
 
       order = all_step_keys
       ti = order.index(target)
@@ -153,27 +158,27 @@ module EmeraldCascade
 
     def begin_flow!
       start!
-      skip_to_first_visible_page!
+      skip_to_first_visible_step!
     end
 
     def reopen_flow!
       reopen!
-      skip_to_first_visible_page!
+      skip_to_first_visible_step!
     end
 
-    def skip_to_first_visible_page!
-      advance! until page_visible?(state)
+    def skip_to_first_visible_step!
+      advance! until step_visible?(state)
     end
 
     # --- definition-driven validation over the visible subset -------------------
     #
-    # `valid_page?` checks one page so partial progress is fine; `valid_for_submit?`
-    # checks the whole form (minus the review page) before completing. Both clear
-    # errors first and validate through the field declarations. A host whose page
+    # `valid_step?` checks one step so partial progress is fine; `valid_for_submit?`
+    # checks the whole form (minus the review step) before completing. Both clear
+    # errors first and validate through the field declarations. A host whose step
     # validates more than its fields (nested records, uploads) overrides
     # `validate_step` and delegates the rest with `super`.
 
-    def valid_page?(step_key)
+    def valid_step?(step_key)
       errors.clear
       step = visible_steps.find { |s| s.key == step_key.to_s }
       return true unless step
@@ -192,13 +197,13 @@ module EmeraldCascade
       errors.empty?
     end
 
-    # Default per-page validation: run each field's own validation. Override on the
-    # host for pages that validate more than their declared fields.
+    # Default per-step validation: run each field's own validation. Override on the
+    # host for steps that validate more than their declared fields.
     def validate_step(step)
       step.fields.each { |field| field.validate(self) }
     end
 
-    # The final page: it only reviews and submits, so whole-form validation skips it.
+    # The final step: it only reviews and submits, so whole-form validation skips it.
     def review_step_key
       'review'
     end

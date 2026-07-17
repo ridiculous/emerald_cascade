@@ -33,7 +33,7 @@ RSpec.describe EmeraldCascade::Submittable do
     expect(Feedback.new.all_step_keys).to eq(%w[about catering review])
   end
 
-  it 'begins at the first visible page and stamps nothing until submit' do
+  it 'begins at the first visible step and stamps nothing until submit' do
     feedback = Feedback.create!
     feedback.begin_flow!
 
@@ -41,29 +41,37 @@ RSpec.describe EmeraldCascade::Submittable do
     expect(feedback.completed_at).to be_nil
   end
 
-  it 'omits pages whose visible_when is false, and navigation skips them' do
+  it 'omits steps whose visible_when is false, and navigation skips them' do
     plain   = Feedback.create!(catered: false)
     catered = Feedback.create!(catered: true)
 
-    expect(plain.visible_page_keys).to eq(%w[about review])
-    expect(catered.visible_page_keys).to eq(%w[about catering review])
-    expect(plain.next_page_of('about')).to eq('review')
-    expect(catered.next_page_of('about')).to eq('catering')
+    expect(plain.visible_step_keys).to eq(%w[about review])
+    expect(catered.visible_step_keys).to eq(%w[about catering review])
+    expect(plain.next_step_of('about')).to eq('review')
+    expect(catered.next_step_of('about')).to eq('catering')
   end
 
   it 'runs the host completion hook and stamps completed_at on submit' do
     feedback = Feedback.create!(catered: false)
     feedback.begin_flow!
-    feedback.goto_page!('review')
+    feedback.goto_step!('review')
     feedback.submit!
 
     expect(feedback.reload).to have_attributes(state: 'complete', finalized: true, completed_at: be_present)
   end
 
-  it 'validates a page through the definition' do
+  it 'validates a step through the definition' do
     record = Feedback.new
-    expect(record.valid_page?('about')).to be(false)
+    expect(record.valid_step?('about')).to be(false)
 
     expect(record.errors[:attendee_name]).to be_present
+  end
+
+  it 'humanizes the persisted state for display' do
+    expect(Feedback.new.display_state).to eq('Not started')
+
+    feedback = Feedback.create!(catered: false)
+    feedback.begin_flow!
+    expect(feedback.display_state).to eq('About')
   end
 end

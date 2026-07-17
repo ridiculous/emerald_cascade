@@ -2,7 +2,7 @@
 
 module EmeraldCascade
   # Shared plumbing for the two controllers that drive a submission: the welcome/lifecycle
-  # controller (SubmissionFlow) and the per-page controller (StepFlow). It reads `@submission`
+  # controller (SubmissionFlow) and the per-step controller (StepFlow). It reads `@submission`
   # (set by a host before_action) and steps it through the Submittable state machine. The host
   # supplies its own record lookup and the two URL builders declared at the bottom.
   module Flow
@@ -19,12 +19,12 @@ module EmeraldCascade
       @submission.lock! if @submission.can_lock?
     end
 
-    # The visible step named by the :step param (nil when it isn't a page for this record).
+    # The visible step named by the :step param (nil when it isn't a step for this record).
     def current_step
       @submission.visible_steps.find { |s| s.key == params[:step] }
     end
 
-    def require_submission
+    def require_submission!
       redirect_to submission_url unless @submission
     end
 
@@ -39,8 +39,8 @@ module EmeraldCascade
       raise NotImplementedError, "#{self.class} must define #submission_url"
     end
 
-    def step_url_for(_step)
-      raise NotImplementedError, "#{self.class} must define #step_url_for"
+    def step_url(_step)
+      raise NotImplementedError, "#{self.class} must define #step_url"
     end
   end
 end

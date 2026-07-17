@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 module EmeraldCascade
-  # Renders and saves one page at a time. Saves are validated per page, so partial progress is
-  # fine; the final review page re-validates the whole form and submits. Include in the host's
-  # steps controller (which supplies the record + URLs via Flow, and the page-specific hooks
+  # Renders and saves one step at a time. Saves are validated per step, so partial progress is
+  # fine; the final review step re-validates the whole form and submits. Include in the host's
+  # steps controller (which supplies the record + URLs via Flow, and the step-specific hooks
   # below).
   module StepFlow
     extend ActiveSupport::Concern
@@ -15,7 +15,7 @@ module EmeraldCascade
 
     def show
       @step = current_step
-      return redirect_to(step_url_for(@submission.state)) unless @step
+      return redirect_to(step_url(@submission.state)) unless @step
 
       on_step_show(@step)
     end
@@ -29,10 +29,10 @@ module EmeraldCascade
       return submit_review if @step.key == review_step_key
 
       assign_step_attributes(@step)
-      if @submission.valid_page?(@step.key)
+      if @submission.valid_step?(@step.key)
         @submission.save!(validate: false)
         @submission.advance_from!(@step.key)
-        redirect_to step_url_for(@submission.state), status: :see_other
+        redirect_to step_url(@submission.state), status: :see_other
       else
         render :show, status: :unprocessable_entity
       end
@@ -56,13 +56,16 @@ module EmeraldCascade
       redirect_to submission_url if @submission.complete? || @submission.locked? || @submission.not_started?
     end
 
-    # A page of only radios/checkboxes sends no scope param when nothing is picked, so tolerate a
-    # missing scope and let valid_page? surface the required-field errors instead of raising.
+    # A step of only radios/checkboxes sends no scope param when nothing is picked, so tolerate a
+    # missing scope and let valid_step? surface the required-field errors instead of raising.
     def submission_scope
       params.fetch(submission_param_key, ActionController::Parameters.new)
     end
 
-    def page_params
+    # Strong params for the current step (the keys the Step declares). Not named `step_params`
+    # on purpose: a host whose base controller auto-invokes `<singular>_params` (e.g. a
+    # `require_strong_params` convention on a StepsController) would clobber `params[:step]`.
+    def answer_params
       submission_scope.permit(*@step.param_keys)
     end
 
@@ -73,16 +76,16 @@ module EmeraldCascade
 
     # --- host overrides -------------------------------------------------------
 
-    # Assign the current page's answers to @submission. Override and call `super` to add
-    # page-specific params (e.g. nested line items).
+    # Assign the current step's answers to @submission. Override and call `super` to add
+    # step-specific params (e.g. nested line items).
     def assign_step_attributes(step)
-      @submission.assign_attributes(page_params) if step.fields.any?
+      @submission.assign_attributes(answer_params) if step.fields.any?
     end
 
-    # Per-page setup on GET (e.g. seed nested rows before the page renders).
+    # Per-step setup on GET (e.g. seed nested rows before the step renders).
     def on_step_show(_step); end
 
-    # The page key whose submit finalizes the form (owned by the submission model).
+    # The step key whose submit finalizes the form (owned by the submission model).
     def review_step_key
       @submission.review_step_key
     end

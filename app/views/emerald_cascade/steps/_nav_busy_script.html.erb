@@ -1,18 +1,27 @@
 <%# Grays out + disables the nav buttons the moment they are pressed (slow-network double-submit %>
-<%# guard). Listeners bind to the page's own nav elements, so they never leak across renders and %>
-<%# the buttons come back active on the next page. %>
+<%# guard), and restores them if a submit fails without replacing the page. Listeners bind to the %>
+<%# page's own nav elements, so they never leak across renders and the buttons come back active on %>
+<%# the next page. %>
 <script>
   (function () {
-    // Clear the pressed-state before Turbo snapshots the page for its cache, so a cached
-    // back/forward preview never restores stale, grayed-out buttons. Registered once.
+    // Doc-level resets, registered once (Turbo Drive keeps the document alive across visits).
+    // clearBusy() re-enables every grayed nav button on the page.
     if (!window.__emeraldNavBusyReset) {
       window.__emeraldNavBusyReset = true;
-      document.addEventListener('turbo:before-cache', function () {
+      var clearBusy = function () {
         document.querySelectorAll('.emerald-btn-busy').forEach(function (el) {
           el.classList.remove('emerald-btn-busy');
           if ('disabled' in el) el.disabled = false;
           el.removeAttribute('aria-disabled');
         });
+      };
+      // Clear the pressed-state before Turbo snapshots the page for its cache, so a cached
+      // back/forward preview never restores stale, grayed-out buttons.
+      document.addEventListener('turbo:before-cache', clearBusy);
+      // Restore when a submit fails without replacing the page (a network/validation error that
+      // renders no new body); otherwise the buttons would stay grayed out for good.
+      document.addEventListener('turbo:submit-end', function (e) {
+        if (e.detail && e.detail.success === false) clearBusy();
       });
     }
 
@@ -30,8 +39,14 @@
     var form = actions.closest('form');
     if (form) form.addEventListener('turbo:submit-start', markBusy);
 
+    // Link buttons (e.g. Back) are Turbo Drive visits, not form submits: gray them on the first
+    // click, but swallow any repeat press while busy -- aria-disabled alone doesn't stop an <a>
+    // from navigating -- so a slow visit can't be fired twice.
     actions.querySelectorAll('a.emerald-btn').forEach(function (link) {
-      link.addEventListener('click', markBusy);
+      link.addEventListener('click', function (e) {
+        if (link.classList.contains('emerald-btn-busy')) { e.preventDefault(); return; }
+        markBusy();
+      });
     });
   })();
 </script>

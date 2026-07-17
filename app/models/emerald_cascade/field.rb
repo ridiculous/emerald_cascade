@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module EmeraldCascade
-  # A single question on a form page. One declaration drives three things: the
+  # A single question on a form step. One declaration drives three things: the
   # rendered input (type/required/choices), the permitted params, and the model
   # validation. `depends_on` gates conditional companion fields (e.g. a description
   # only shown/required when its yes/no toggle is "yes"), driving both the

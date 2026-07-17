@@ -1,23 +1,40 @@
 <%#
-  Background turbo-frame poller. While `poll_marker` is present inside the `frame_id`
-  frame, reload the frame every `interval` ms so async processing results (e.g. OCR)
-  appear without a manual refresh. It pauses during an upload/remove submit so a poll can
-  never cancel that request, and tears down on any Turbo navigation so the timer never
-  outlives the page or fires mid-visit.
+  Background turbo-frame poller. While `poll_marker` is present inside the `frame_id` frame,
+  reload the frame every `interval` ms so async processing results (e.g. OCR) appear without a
+  manual refresh. It pauses during an upload/remove submit and while a request targeting the
+  frame is already in flight (so a poll can never cancel it), tears down on any Turbo navigation
+  (so the timer never outlives the page or fires mid-visit), and -- when `uploader_selector` is
+  given -- also pauses while a native file picker opened from that element is open, so a reload
+  can't swap the <input type=file> out from under the OS picker and drop the selection.
+
+  Locals: poll_marker, frame_id, interval, and optional uploader_selector (a CSS selector,
+  relative to the frame, whose click opens a file picker; omit when the frame has no uploader).
 -%>
 <script>
   (function () {
     var marker = <%= raw poll_marker.to_json %>, interval = <%= interval %>;
+    var uploaderSelector = <%= raw local_assigns[:uploader_selector].to_json %>;
     var url = window.location.href, timer = null, polls = 0, frame = null;
+    // True from the moment the file picker is opened until focus returns (picked or cancelled).
+    // A frame reload while it's open would replace the <input type=file> and drop the selection
+    // -- most visibly on mobile, where the picker can stay open for seconds and nothing else
+    // marks the frame busy. Inert unless uploader_selector is given.
+    var selecting = false;
 
     function pending() { return !!frame.querySelector(marker); }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     function tick() {
       if (!pending() || polls++ > 60) return stop(); // stop when settled or after ~4 min
+      // Don't touch the frame while a file picker is open (would drop the selection) or while a
+      // request targeting the frame is in flight. A turbo-frame runs one request at a time, so
+      // reloading now would ABORT an in-flight upload/remove (or a still-loading prior poll);
+      // Turbo marks the frame [busy] for that duration. Skip this beat; refresh on the next.
+      if (selecting || frame.hasAttribute('busy')) return;
       // First poll seeds src (which fetches); later polls re-fetch the same frame in place.
       if (frame.hasAttribute('src')) frame.reload(); else frame.setAttribute('src', url);
     }
     function ensure() {
+      if (selecting) return; // stay paused until the picker closes
       if (pending() && !timer) { polls = 0; timer = setInterval(tick, interval); }
       else if (!pending()) stop();
     }
@@ -26,11 +43,38 @@
       frame = document.getElementById(<%= raw frame_id.to_json %>);
       if (!frame || typeof frame.reload !== 'function') return;
 
-      frame.addEventListener('turbo:submit-start', stop);
-      frame.addEventListener('turbo:frame-load', ensure);
+      // Pause the moment an upload/remove starts so a background poll can never cancel it;
+      // ensure() restarts after the frame reloads with the result.
+      frame.addEventListener('turbo:submit-start', function () { selecting = false; stop(); });
+      frame.addEventListener('turbo:frame-load', function () { selecting = false; ensure(); });
 
+      var onPickerOpen, onReturn;
+      if (uploaderSelector) {
+        // Opening the picker suspends polling. Delegated + matched on the uploader element
+        // (recreated on every frame reload), scoped to this frame.
+        onPickerOpen = function (e) {
+          if (e.target.closest && e.target.closest('#' + frame.id + ' ' + uploaderSelector)) {
+            selecting = true;
+            stop();
+          }
+        };
+        // Returning from the picker resumes: focus/visibility cover a cancel (no upload fires),
+        // while submit-start/frame-load above cover a real pick (the upload path takes over).
+        onReturn = function () { if (selecting) { selecting = false; ensure(); } };
+        document.addEventListener('click', onPickerOpen);
+        window.addEventListener('focus', onReturn);
+        document.addEventListener('visibilitychange', onReturn);
+      }
+
+      // Never let the poll timer or listeners outlive the page or fire mid-navigation -- a Turbo
+      // Drive visit (Continue/Back) tears everything down so it can't race or leak across pages.
       function teardown() {
         stop();
+        if (uploaderSelector) {
+          document.removeEventListener('click', onPickerOpen);
+          window.removeEventListener('focus', onReturn);
+          document.removeEventListener('visibilitychange', onReturn);
+        }
         document.removeEventListener('turbo:before-visit', teardown);
         document.removeEventListener('turbo:before-cache', teardown);
       }
@@ -42,9 +86,9 @@
 
     // Turbo ships as a deferred ES module, so this inline (classic) script runs before the
     // turbo-frame element is upgraded and gains reload() -- without waiting, the poller would
-    // bail on the guard above and OCR status would never refresh on its own. whenDefined
-    // resolves immediately once Turbo is present (e.g. on later Turbo Drive re-renders), so it's
-    // safe both on a fresh load and after a Drive body swap.
+    // bail on the guard above and status would never refresh on its own. whenDefined resolves
+    // immediately once Turbo is present (e.g. on later Turbo Drive re-renders), so it's safe
+    // both on a fresh load and after a Drive body swap.
     if (window.customElements && customElements.whenDefined) {
       customElements.whenDefined('turbo-frame').then(setup);
     } else {

@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 module EmeraldCascade
-  # Base class for a form definition: the single source of truth for which pages a
-  # form shows and what each page contains. Subclass it and declare steps with `step`.
+  # Base class for a form definition: the single source of truth for which steps a
+  # form shows and what each step contains. Subclass it and declare steps with `step`.
   #
   #   class ClosingForm::Definition < EmeraldCascade::Definition
   #     step :photos, title: 'Packing sheet photos', partial: 'photos',
@@ -13,7 +13,7 @@ module EmeraldCascade
   #     step :review, title: 'Review & submit', partial: 'review'
   #   end
   #
-  # Steps are always kept in declaration order; `visible_when` only omits pages.
+  # Steps are always kept in declaration order; `visible_when` only omits steps.
   class Definition
     class << self
       def steps
@@ -21,7 +21,7 @@ module EmeraldCascade
       end
 
       # Subclasses start from a copy of their parent's steps so a shared base can
-      # contribute common pages if desired.
+      # contribute common steps if desired.
       def inherited(subclass)
         super
         subclass.instance_variable_set(:@steps, steps.dup)
